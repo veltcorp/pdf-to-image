@@ -1,9 +1,10 @@
 from fastapi import FastAPI, UploadFile, File
-from fastapi.responses import FileResponse
+from fastapi.responses import StreamingResponse
 import subprocess
 import tempfile
 import os
 import zipfile
+import io
 
 app = FastAPI()
 
@@ -21,14 +22,17 @@ async def pdf_to_png(file: UploadFile = File(...), dpi: int = 200):
             check=True
         )
 
-        zip_path = os.path.join(tmp, "pages.zip")
-        with zipfile.ZipFile(zip_path, "w", compression=zipfile.ZIP_DEFLATED) as z:
+        # Cria o ZIP em memória (não depende do /tmp depois)
+        buf = io.BytesIO()
+        with zipfile.ZipFile(buf, "w", compression=zipfile.ZIP_DEFLATED) as z:
             for name in sorted(os.listdir(tmp)):
                 if name.endswith(".png"):
                     z.write(os.path.join(tmp, name), arcname=name)
 
-        return FileResponse(
-            zip_path,
+        buf.seek(0)
+
+        return StreamingResponse(
+            buf,
             media_type="application/zip",
-            filename="pages.zip"
+            headers={"Content-Disposition": 'attachment; filename="pages.zip"'}
         )
